@@ -4,36 +4,17 @@ import { PythonParser, ClassInfo } from './pythonParser';
 export class ClassHierarchyProvider {
     private parser: PythonParser;
     private context: vscode.ExtensionContext;
+    private isNavigating: boolean = false;
 
     constructor(parser: PythonParser, context: vscode.ExtensionContext) {
         this.parser = parser;
         this.context = context;
     }
 
-    private getIconPath(iconName: string): vscode.Uri {
-        // We'll use built-in codicons
-        return vscode.Uri.parse(`data:image/svg+xml,${encodeURIComponent(this.getSvgIcon(iconName))}`);
+    public isCurrentlyNavigating(): boolean {
+        return this.isNavigating;
     }
 
-    private getSvgIcon(iconName: string): string {
-        if (iconName === 'override') {
-            // Arrow pointing up (method overrides parent)
-            return `<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#4CAF50">
-                <path d="M8 3l4 4H9v6H7V7H4l4-4z"/>
-            </svg>`;
-        } else if (iconName === 'implemented') {
-            // Arrow pointing down (method has implementations)
-            return `<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#2196F3">
-                <path d="M8 13l-4-4h3V3h2v6h3l-4 4z"/>
-            </svg>`;
-        } else if (iconName === 'both') {
-            // Double arrow (method both overrides and is implemented)
-            return `<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#9C27B0">
-                <path d="M8 3l3 3H9v4h2l-3 3-3-3h2V6H5l3-3z"/>
-            </svg>`;
-        }
-        return '';
-    }
 
     /**
      * Update decorations for the current editor
@@ -135,7 +116,7 @@ export class ClassHierarchyProvider {
         hoverMessage: string
     ): vscode.DecorationOptions {
         const range = new vscode.Range(line, 0, line, 0);
-        
+
         // Get the appropriate icon symbol and color
         let iconSymbol = '';
         let iconColor = '';
@@ -149,7 +130,7 @@ export class ClassHierarchyProvider {
             iconSymbol = '↕';
             iconColor = '#9C27B0';
         }
-        
+
         return {
             range,
             hoverMessage,
@@ -169,21 +150,10 @@ export class ClassHierarchyProvider {
         implementedDecorations: vscode.DecorationOptions[],
         bothDecorations: vscode.DecorationOptions[]
     ) {
-        // Create separate decoration types for each icon type
-        const overrideDecorationType = vscode.window.createTextEditorDecorationType({
-            gutterIconPath: this.getIconPath('override'),
-            gutterIconSize: 'contain'
-        });
-
-        const implementedDecorationType = vscode.window.createTextEditorDecorationType({
-            gutterIconPath: this.getIconPath('implemented'),
-            gutterIconSize: 'contain'
-        });
-
-        const bothDecorationType = vscode.window.createTextEditorDecorationType({
-            gutterIconPath: this.getIconPath('both'),
-            gutterIconSize: 'contain'
-        });
+        // Create separate decoration types for each icon type (without gutter icons)
+        const overrideDecorationType = vscode.window.createTextEditorDecorationType({});
+        const implementedDecorationType = vscode.window.createTextEditorDecorationType({});
+        const bothDecorationType = vscode.window.createTextEditorDecorationType({});
 
         editor.setDecorations(overrideDecorationType, overrideDecorations);
         editor.setDecorations(implementedDecorationType, implementedDecorations);
@@ -195,10 +165,12 @@ export class ClassHierarchyProvider {
      */
     public async navigateToImplementations(document: vscode.TextDocument, line: number, direct: boolean = false) {
         const classes = this.parser.parseDocument(document);
-        
+        console.log(`[navigateToImplementations] Line ${line}, direct: ${direct}`);
+
         // Find the class or method at the given line
         for (const classInfo of classes) {
             if (classInfo.startLine === line) {
+                console.log(`[navigateToImplementations] Found class: ${classInfo.name}`);
                 // Navigate to subclasses
                 await this.showSubclasses(classInfo.name, direct);
                 return;
@@ -206,6 +178,7 @@ export class ClassHierarchyProvider {
 
             for (const method of classInfo.methods) {
                 if (method.line === line) {
+                    console.log(`[navigateToImplementations] Found method: ${classInfo.name}.${method.name}`);
                     // Navigate to method implementations
                     await this.showMethodImplementations(classInfo.name, method.name, direct);
                     return;
@@ -213,6 +186,7 @@ export class ClassHierarchyProvider {
             }
         }
 
+        console.log(`[navigateToImplementations] No class or method found at line ${line}`);
         vscode.window.showInformationMessage('No implementations found');
     }
 
@@ -221,10 +195,12 @@ export class ClassHierarchyProvider {
      */
     public async navigateToSuperclass(document: vscode.TextDocument, line: number, direct: boolean = false) {
         const classes = this.parser.parseDocument(document);
+        console.log(`[navigateToSuperclass] Line ${line}, direct: ${direct}`);
 
         // Find the class or method at the given line
         for (const classInfo of classes) {
             if (classInfo.startLine === line) {
+                console.log(`[navigateToSuperclass] Found class: ${classInfo.name}`);
                 // Navigate to parent class
                 if (classInfo.superclasses.length > 0) {
                     await this.showParentClasses(classInfo.superclasses, direct);
@@ -234,6 +210,7 @@ export class ClassHierarchyProvider {
 
             for (const method of classInfo.methods) {
                 if (method.line === line) {
+                    console.log(`[navigateToSuperclass] Found method: ${classInfo.name}.${method.name}`);
                     // Navigate to parent method
                     await this.showParentMethod(classInfo, method.name, direct);
                     return;
@@ -241,6 +218,7 @@ export class ClassHierarchyProvider {
             }
         }
 
+        console.log(`[navigateToSuperclass] No class or method found at line ${line}`);
         vscode.window.showInformationMessage('No parent class found');
     }
 
@@ -259,14 +237,16 @@ export class ClassHierarchyProvider {
             }
         }
 
-        // If direct mode and only one item, navigate immediately
-        if (direct || items.length === 1) {
+        // If only one item, navigate immediately (always)
+        if (items.length === 1) {
+            this.isNavigating = true;
             const item = items[0];
             const document = await vscode.workspace.openTextDocument(item.filePath);
             const editor = await vscode.window.showTextDocument(document);
             const position = new vscode.Position(item.cls.startLine, 0);
             editor.selection = new vscode.Selection(position, position);
             editor.revealRange(new vscode.Range(position, position));
+            setTimeout(() => { this.isNavigating = false; }, 100);
             return;
         }
 
@@ -282,12 +262,14 @@ export class ClassHierarchyProvider {
         });
 
         if (selected && selected.description) {
+            this.isNavigating = true;
             const document = await vscode.workspace.openTextDocument(selected.description);
             const editor = await vscode.window.showTextDocument(document);
             const lineNumber = parseInt(selected.detail?.replace('Line ', '') || '1') - 1;
             const position = new vscode.Position(lineNumber, 0);
             editor.selection = new vscode.Selection(position, position);
             editor.revealRange(new vscode.Range(position, position));
+            setTimeout(() => { this.isNavigating = false; }, 100);
         }
     }
 
@@ -299,13 +281,15 @@ export class ClassHierarchyProvider {
             return;
         }
 
-        // If direct mode or only one implementation, navigate immediately
-        if (direct || implementations.length === 1) {
+        // If only one implementation, navigate immediately (always)
+        if (implementations.length === 1) {
+            this.isNavigating = true;
             const impl = implementations[0];
             const editor = await vscode.window.showTextDocument(impl.document);
             const position = new vscode.Position(impl.line, 0);
             editor.selection = new vscode.Selection(position, position);
             editor.revealRange(new vscode.Range(position, position));
+            setTimeout(() => { this.isNavigating = false; }, 100);
             return;
         }
 
@@ -321,12 +305,14 @@ export class ClassHierarchyProvider {
         });
 
         if (selected && selected.description) {
+            this.isNavigating = true;
             const document = await vscode.workspace.openTextDocument(selected.description);
             const editor = await vscode.window.showTextDocument(document);
             const lineNumber = parseInt(selected.detail?.replace('Line ', '') || '1') - 1;
             const position = new vscode.Position(lineNumber, 0);
             editor.selection = new vscode.Selection(position, position);
             editor.revealRange(new vscode.Range(position, position));
+            setTimeout(() => { this.isNavigating = false; }, 100);
         }
     }
 
@@ -345,13 +331,15 @@ export class ClassHierarchyProvider {
             return;
         }
 
-        // If direct mode or only one parent, navigate immediately
-        if (direct || parents.length === 1) {
+        // If only one parent, navigate immediately (always)
+        if (parents.length === 1) {
+            this.isNavigating = true;
             const parent = parents[0];
             const editor = await vscode.window.showTextDocument(parent.document);
             const position = new vscode.Position(parent.classInfo.startLine, 0);
             editor.selection = new vscode.Selection(position, position);
             editor.revealRange(new vscode.Range(position, position));
+            setTimeout(() => { this.isNavigating = false; }, 100);
             return;
         }
 
@@ -367,31 +355,45 @@ export class ClassHierarchyProvider {
         });
 
         if (selected && selected.description) {
+            this.isNavigating = true;
             const document = await vscode.workspace.openTextDocument(selected.description);
             const editor = await vscode.window.showTextDocument(document);
             const lineNumber = parseInt(selected.detail?.replace('Line ', '') || '1') - 1;
             const position = new vscode.Position(lineNumber, 0);
             editor.selection = new vscode.Selection(position, position);
             editor.revealRange(new vscode.Range(position, position));
+            setTimeout(() => { this.isNavigating = false; }, 100);
         }
     }
 
     private async showParentMethod(classInfo: ClassInfo, methodName: string, direct: boolean = false) {
+        console.log(`[showParentMethod] Looking for parent of ${classInfo.name}.${methodName}, superclasses: ${classInfo.superclasses.join(', ')}`);
+
         // Direct mode doesn't affect this - always navigate to first found parent method
         for (const superclass of classInfo.superclasses) {
+            console.log(`[showParentMethod] Checking superclass: ${superclass}`);
             const parent = await this.parser.findParentClass(superclass);
             if (parent) {
+                console.log(`[showParentMethod] Found parent class: ${parent.classInfo.name}`);
                 const method = parent.classInfo.methods.find(m => m.name === methodName);
                 if (method) {
+                    console.log(`[showParentMethod] Found parent method at line ${method.line}, navigating...`);
+                    this.isNavigating = true;
                     const editor = await vscode.window.showTextDocument(parent.document);
                     const position = new vscode.Position(method.line, 0);
                     editor.selection = new vscode.Selection(position, position);
                     editor.revealRange(new vscode.Range(position, position));
+                    setTimeout(() => { this.isNavigating = false; }, 100);
                     return;
+                } else {
+                    console.log(`[showParentMethod] Method ${methodName} not found in parent class ${parent.classInfo.name}`);
                 }
+            } else {
+                console.log(`[showParentMethod] Parent class ${superclass} not found in workspace`);
             }
         }
 
+        console.log(`[showParentMethod] Parent method not found`);
         vscode.window.showInformationMessage('Parent method not found');
     }
 }

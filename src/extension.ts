@@ -102,6 +102,12 @@ export function activate(context: vscode.ExtensionContext) {
             return;
         }
 
+        // Ignore if we're currently navigating programmatically
+        if (hierarchyProvider.isCurrentlyNavigating()) {
+            console.log(`[ClassNavigator] Ignoring selection change - currently navigating`);
+            return;
+        }
+
         // Check if click was at the beginning of a line (where icons are)
         const selection = event.selections[0];
         if (!selection.isEmpty) {
@@ -109,20 +115,26 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         const position = selection.active;
+        console.log(`[ClassNavigator] Click at line ${position.line}, column ${position.character}`);
+
         // If clicked at column 0 or 1 (where the icon is), trigger navigation
         if (position.character <= 1) {
             const line = position.line;
             const classes = parser.parseDocument(editor.document);
+            console.log(`[ClassNavigator] Click in icon area, line ${line}`);
 
             // Check if this line has an icon
             for (const classInfo of classes) {
                 if (classInfo.startLine === line) {
+                    console.log(`[ClassNavigator] Clicked on class: ${classInfo.name}`);
                     // Clicked on class line
                     if (classInfo.superclasses.length > 0) {
+                        console.log(`[ClassNavigator] Has parent: ${classInfo.superclasses.join(', ')}, navigating to parent`);
                         await hierarchyProvider.navigateToSuperclass(editor.document, line, false);
                     } else {
                         const subclasses = await parser.findSubclasses(classInfo.name);
                         if (subclasses.size > 0) {
+                            console.log(`[ClassNavigator] Has ${subclasses.size} subclasses, navigating to children`);
                             await hierarchyProvider.navigateToImplementations(editor.document, line, false);
                         }
                     }
@@ -131,20 +143,26 @@ export function activate(context: vscode.ExtensionContext) {
 
                 for (const method of classInfo.methods) {
                     if (method.line === line) {
+                        console.log(`[ClassNavigator] Clicked on method: ${classInfo.name}.${method.name}`);
                         // Clicked on method line
                         const isOverriding = await parser.isMethodOverriding(classInfo, method.name);
+                        const impls = await parser.findMethodImplementations(classInfo.name, method.name);
+
+                        console.log(`[ClassNavigator] isOverriding: ${isOverriding}, implementations: ${impls.length}`);
+
+                        // If has both parent and children, prioritize parent (green arrow)
                         if (isOverriding) {
+                            console.log(`[ClassNavigator] Method overrides parent, navigating to parent method`);
                             await hierarchyProvider.navigateToSuperclass(editor.document, line, false);
-                        } else {
-                            const impls = await parser.findMethodImplementations(classInfo.name, method.name);
-                            if (impls.length > 0) {
-                                await hierarchyProvider.navigateToImplementations(editor.document, line, false);
-                            }
+                        } else if (impls.length > 0) {
+                            console.log(`[ClassNavigator] Method has implementations, navigating to children`);
+                            await hierarchyProvider.navigateToImplementations(editor.document, line, false);
                         }
                         return;
                     }
                 }
             }
+            console.log(`[ClassNavigator] No class or method found at line ${line}`);
         }
     });
 
