@@ -135,9 +135,31 @@ export class ClassHierarchyProvider {
         hoverMessage: string
     ): vscode.DecorationOptions {
         const range = new vscode.Range(line, 0, line, 0);
+        
+        // Get the appropriate icon symbol and color
+        let iconSymbol = '';
+        let iconColor = '';
+        if (iconType === 'override') {
+            iconSymbol = '↑';
+            iconColor = '#4CAF50';
+        } else if (iconType === 'implemented') {
+            iconSymbol = '↓';
+            iconColor = '#2196F3';
+        } else if (iconType === 'both') {
+            iconSymbol = '↕';
+            iconColor = '#9C27B0';
+        }
+        
         return {
             range,
-            hoverMessage
+            hoverMessage,
+            renderOptions: {
+                before: {
+                    contentText: iconSymbol + ' ',
+                    color: iconColor,
+                    fontWeight: 'bold'
+                }
+            }
         };
     }
 
@@ -171,21 +193,21 @@ export class ClassHierarchyProvider {
     /**
      * Navigate to implementations of a class or method
      */
-    public async navigateToImplementations(document: vscode.TextDocument, line: number) {
+    public async navigateToImplementations(document: vscode.TextDocument, line: number, direct: boolean = false) {
         const classes = this.parser.parseDocument(document);
-
+        
         // Find the class or method at the given line
         for (const classInfo of classes) {
             if (classInfo.startLine === line) {
                 // Navigate to subclasses
-                await this.showSubclasses(classInfo.name);
+                await this.showSubclasses(classInfo.name, direct);
                 return;
             }
 
             for (const method of classInfo.methods) {
                 if (method.line === line) {
                     // Navigate to method implementations
-                    await this.showMethodImplementations(classInfo.name, method.name);
+                    await this.showMethodImplementations(classInfo.name, method.name, direct);
                     return;
                 }
             }
@@ -197,7 +219,7 @@ export class ClassHierarchyProvider {
     /**
      * Navigate to superclass
      */
-    public async navigateToSuperclass(document: vscode.TextDocument, line: number) {
+    public async navigateToSuperclass(document: vscode.TextDocument, line: number, direct: boolean = false) {
         const classes = this.parser.parseDocument(document);
 
         // Find the class or method at the given line
@@ -205,7 +227,7 @@ export class ClassHierarchyProvider {
             if (classInfo.startLine === line) {
                 // Navigate to parent class
                 if (classInfo.superclasses.length > 0) {
-                    await this.showParentClasses(classInfo.superclasses);
+                    await this.showParentClasses(classInfo.superclasses, direct);
                 }
                 return;
             }
@@ -213,7 +235,7 @@ export class ClassHierarchyProvider {
             for (const method of classInfo.methods) {
                 if (method.line === line) {
                     // Navigate to parent method
-                    await this.showParentMethod(classInfo, method.name);
+                    await this.showParentMethod(classInfo, method.name, direct);
                     return;
                 }
             }
@@ -222,7 +244,7 @@ export class ClassHierarchyProvider {
         vscode.window.showInformationMessage('No parent class found');
     }
 
-    private async showSubclasses(className: string) {
+    private async showSubclasses(className: string, direct: boolean = false) {
         const subclasses = await this.parser.findSubclasses(className);
 
         if (subclasses.size === 0) {
@@ -230,18 +252,32 @@ export class ClassHierarchyProvider {
             return;
         }
 
-        const items: vscode.QuickPickItem[] = [];
+        const items: Array<{filePath: string, cls: any}> = [];
         for (const [filePath, classes] of subclasses) {
             for (const cls of classes) {
-                items.push({
-                    label: cls.name,
-                    description: filePath,
-                    detail: `Line ${cls.startLine + 1}`
-                });
+                items.push({filePath, cls});
             }
         }
 
-        const selected = await vscode.window.showQuickPick(items, {
+        // If direct mode and only one item, navigate immediately
+        if (direct || items.length === 1) {
+            const item = items[0];
+            const document = await vscode.workspace.openTextDocument(item.filePath);
+            const editor = await vscode.window.showTextDocument(document);
+            const position = new vscode.Position(item.cls.startLine, 0);
+            editor.selection = new vscode.Selection(position, position);
+            editor.revealRange(new vscode.Range(position, position));
+            return;
+        }
+
+        // Show Quick Pick for multiple items
+        const quickPickItems: vscode.QuickPickItem[] = items.map(item => ({
+            label: item.cls.name,
+            description: item.filePath,
+            detail: `Line ${item.cls.startLine + 1}`
+        }));
+
+        const selected = await vscode.window.showQuickPick(quickPickItems, {
             placeHolder: 'Select a subclass to navigate to'
         });
 
@@ -255,7 +291,7 @@ export class ClassHierarchyProvider {
         }
     }
 
-    private async showMethodImplementations(className: string, methodName: string) {
+    private async showMethodImplementations(className: string, methodName: string, direct: boolean = false) {
         const implementations = await this.parser.findMethodImplementations(className, methodName);
 
         if (implementations.length === 0) {
@@ -263,6 +299,17 @@ export class ClassHierarchyProvider {
             return;
         }
 
+        // If direct mode or only one implementation, navigate immediately
+        if (direct || implementations.length === 1) {
+            const impl = implementations[0];
+            const editor = await vscode.window.showTextDocument(impl.document);
+            const position = new vscode.Position(impl.line, 0);
+            editor.selection = new vscode.Selection(position, position);
+            editor.revealRange(new vscode.Range(position, position));
+            return;
+        }
+
+        // Show Quick Pick for multiple implementations
         const items: vscode.QuickPickItem[] = implementations.map(impl => ({
             label: `${impl.className}.${methodName}`,
             description: impl.document.uri.fsPath,
@@ -283,24 +330,37 @@ export class ClassHierarchyProvider {
         }
     }
 
-    private async showParentClasses(superclasses: string[]) {
-        const items: vscode.QuickPickItem[] = [];
+    private async showParentClasses(superclasses: string[], direct: boolean = false) {
+        const parents: Array<{document: any, classInfo: any}> = [];
 
         for (const superclass of superclasses) {
             const parent = await this.parser.findParentClass(superclass);
             if (parent) {
-                items.push({
-                    label: parent.classInfo.name,
-                    description: parent.document.uri.fsPath,
-                    detail: `Line ${parent.classInfo.startLine + 1}`
-                });
+                parents.push(parent);
             }
         }
 
-        if (items.length === 0) {
+        if (parents.length === 0) {
             vscode.window.showInformationMessage('Parent class not found in workspace');
             return;
         }
+
+        // If direct mode or only one parent, navigate immediately
+        if (direct || parents.length === 1) {
+            const parent = parents[0];
+            const editor = await vscode.window.showTextDocument(parent.document);
+            const position = new vscode.Position(parent.classInfo.startLine, 0);
+            editor.selection = new vscode.Selection(position, position);
+            editor.revealRange(new vscode.Range(position, position));
+            return;
+        }
+
+        // Show Quick Pick for multiple parents
+        const items: vscode.QuickPickItem[] = parents.map(parent => ({
+            label: parent.classInfo.name,
+            description: parent.document.uri.fsPath,
+            detail: `Line ${parent.classInfo.startLine + 1}`
+        }));
 
         const selected = await vscode.window.showQuickPick(items, {
             placeHolder: 'Select a parent class to navigate to'
@@ -316,7 +376,8 @@ export class ClassHierarchyProvider {
         }
     }
 
-    private async showParentMethod(classInfo: ClassInfo, methodName: string) {
+    private async showParentMethod(classInfo: ClassInfo, methodName: string, direct: boolean = false) {
+        // Direct mode doesn't affect this - always navigate to first found parent method
         for (const superclass of classInfo.superclasses) {
             const parent = await this.parser.findParentClass(superclass);
             if (parent) {

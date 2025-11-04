@@ -22,6 +22,22 @@
       {
         "command": "python-class-navigator.navigateToSuperclass",
         "title": "Python: Navigate to Superclass"
+      },
+      {
+        "command": "python-class-navigator.handleIconClick",
+        "title": "Python: Navigate via Icon"
+      },
+      {
+        "command": "python-class-navigator.iconClick",
+        "title": "Python: Click Icon to Navigate"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "python-class-navigator.iconClick",
+        "key": "alt+enter",
+        "mac": "alt+enter",
+        "when": "editorTextFocus && editorLangId == python"
       }
     ]
   },
