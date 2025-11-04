@@ -13,18 +13,18 @@
         "onLanguage:python"
     ],
     "main": "./out/extension.js",
-    "contributes": {
-        "commands": [
-            {
-                "command": "python-class-navigator.navigateToImplementations",
-                "title": "Navigate to Implementations"
-            },
-            {
-                "command": "python-class-navigator.navigateToSuperclass",
-                "title": "Navigate to Superclass"
-            }
-        ]
-    },
+  "contributes": {
+    "commands": [
+      {
+        "command": "python-class-navigator.navigateToImplementations",
+        "title": "Python: Navigate to Implementations"
+      },
+      {
+        "command": "python-class-navigator.navigateToSuperclass",
+        "title": "Python: Navigate to Superclass"
+      }
+    ]
+  },
     "scripts": {
         "vscode:prepublish": "npm run compile",
         "compile": "tsc -p ./",

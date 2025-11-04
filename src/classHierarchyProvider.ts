@@ -2,19 +2,12 @@ import * as vscode from 'vscode';
 import { PythonParser, ClassInfo } from './pythonParser';
 
 export class ClassHierarchyProvider {
-    private decorationType: vscode.TextEditorDecorationType;
     private parser: PythonParser;
     private context: vscode.ExtensionContext;
 
     constructor(parser: PythonParser, context: vscode.ExtensionContext) {
         this.parser = parser;
         this.context = context;
-
-        // Create decoration type for gutter icons
-        this.decorationType = vscode.window.createTextEditorDecorationType({
-            gutterIconPath: this.getIconPath('override'),
-            gutterIconSize: 'contain'
-        });
     }
 
     private getIconPath(iconName: string): vscode.Uri {
@@ -52,9 +45,6 @@ export class ClassHierarchyProvider {
 
         const document = editor.document;
         const classes = this.parser.parseDocument(document);
-
-        // Clear existing decorations
-        editor.setDecorations(this.decorationType, []);
 
         // Create new decorations
         const overrideDecorations: vscode.DecorationOptions[] = [];
@@ -147,12 +137,7 @@ export class ClassHierarchyProvider {
         const range = new vscode.Range(line, 0, line, 0);
         return {
             range,
-            hoverMessage,
-            renderOptions: {
-                before: {
-                    contentIconPath: this.getIconPath(iconType)
-                }
-            }
+            hoverMessage
         };
     }
 
