@@ -1,0 +1,12 @@
+{
+    "editor.codeLens": true,
+    "python.analysis.autoImportCompletions": true,
+    "files.exclude": {
+        "**/node_modules": true,
+        "**/.git": true
+    },
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/out": true
+    }
+}
