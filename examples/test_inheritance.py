@@ -29,6 +29,10 @@ class Dog(Animal):
         """Уникальный метод для собаки"""
         return f"{self.name} is fetching the ball"
 
+    def bark(self):
+        """Уникальный метод для собаки"""
+        return f"{self.name} is barking"
+
 
 class Cat(Animal):
     """Класс кошки, наследуется от Animal"""
@@ -64,6 +68,9 @@ class GoldenRetriever(Dog):
     def swim(self):
         """Уникальный метод для золотистого ретривера"""
         return f"{self.name} loves swimming"
+
+    def bark(self):
+        return "some method"
 
 
 class PersianCat(Cat):

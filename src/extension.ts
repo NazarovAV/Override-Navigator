@@ -117,8 +117,9 @@ export function activate(context: vscode.ExtensionContext) {
         const position = selection.active;
         console.log(`[ClassNavigator] Click at line ${position.line}, column ${position.character}`);
 
-        // If clicked at column 0 or 1 (where the icon is), trigger navigation
-        if (position.character <= 1) {
+        // If clicked at column 0-3 (where the icons are), trigger navigation
+        // Green arrow (↑) is at column 0-1, blue arrow (↓) is at column 2-3
+        if (position.character <= 3) {
             const line = position.line;
             const classes = parser.parseDocument(editor.document);
             console.log(`[ClassNavigator] Click in icon area, line ${line}`);
@@ -128,15 +129,35 @@ export function activate(context: vscode.ExtensionContext) {
                 if (classInfo.startLine === line) {
                     console.log(`[ClassNavigator] Clicked on class: ${classInfo.name}`);
                     // Clicked on class line
-                    if (classInfo.superclasses.length > 0) {
+                    const hasParent = classInfo.superclasses.length > 0;
+                    const subclasses = await parser.findSubclasses(classInfo.name);
+                    const hasChildren = subclasses.size > 0;
+
+                    console.log(`[ClassNavigator] hasParent: ${hasParent}, hasChildren: ${hasChildren}, column: ${position.character}`);
+
+                    // If has both parent and children, show menu to choose direction
+                    if (hasParent && hasChildren) {
+                        console.log(`[ClassNavigator] Has both parent and children, showing menu`);
+                        const choice = await vscode.window.showQuickPick([
+                            { label: '↑ Go to parent class', value: 'parent' },
+                            { label: '↓ Go to child classes', value: 'children' }
+                        ], {
+                            placeHolder: 'Choose navigation direction'
+                        });
+
+                        if (choice) {
+                            if (choice.value === 'parent') {
+                                await hierarchyProvider.navigateToSuperclass(editor.document, line, false);
+                            } else {
+                                await hierarchyProvider.navigateToImplementations(editor.document, line, false);
+                            }
+                        }
+                    } else if (hasParent) {
                         console.log(`[ClassNavigator] Has parent: ${classInfo.superclasses.join(', ')}, navigating to parent`);
                         await hierarchyProvider.navigateToSuperclass(editor.document, line, false);
-                    } else {
-                        const subclasses = await parser.findSubclasses(classInfo.name);
-                        if (subclasses.size > 0) {
-                            console.log(`[ClassNavigator] Has ${subclasses.size} subclasses, navigating to children`);
-                            await hierarchyProvider.navigateToImplementations(editor.document, line, false);
-                        }
+                    } else if (hasChildren) {
+                        console.log(`[ClassNavigator] Has ${subclasses.size} subclasses, navigating to children`);
+                        await hierarchyProvider.navigateToImplementations(editor.document, line, false);
                     }
                     return;
                 }
@@ -148,10 +169,26 @@ export function activate(context: vscode.ExtensionContext) {
                         const isOverriding = await parser.isMethodOverriding(classInfo, method.name);
                         const impls = await parser.findMethodImplementations(classInfo.name, method.name);
 
-                        console.log(`[ClassNavigator] isOverriding: ${isOverriding}, implementations: ${impls.length}`);
+                        console.log(`[ClassNavigator] isOverriding: ${isOverriding}, implementations: ${impls.length}, column: ${position.character}`);
 
-                        // If has both parent and children, prioritize parent (green arrow)
-                        if (isOverriding) {
+                        // If has both parent and children, show menu to choose direction
+                        if (isOverriding && impls.length > 0) {
+                            console.log(`[ClassNavigator] Method has both parent and children, showing menu`);
+                            const choice = await vscode.window.showQuickPick([
+                                { label: '↑ Go to parent method', value: 'parent' },
+                                { label: '↓ Go to child implementations', value: 'children' }
+                            ], {
+                                placeHolder: 'Choose navigation direction'
+                            });
+
+                            if (choice) {
+                                if (choice.value === 'parent') {
+                                    await hierarchyProvider.navigateToSuperclass(editor.document, line, false);
+                                } else {
+                                    await hierarchyProvider.navigateToImplementations(editor.document, line, false);
+                                }
+                            }
+                        } else if (isOverriding) {
                             console.log(`[ClassNavigator] Method overrides parent, navigating to parent method`);
                             await hierarchyProvider.navigateToSuperclass(editor.document, line, false);
                         } else if (impls.length > 0) {

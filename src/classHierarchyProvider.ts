@@ -30,7 +30,6 @@ export class ClassHierarchyProvider {
         // Create new decorations
         const overrideDecorations: vscode.DecorationOptions[] = [];
         const implementedDecorations: vscode.DecorationOptions[] = [];
-        const bothDecorations: vscode.DecorationOptions[] = [];
 
         for (const classInfo of classes) {
             // Check class line for inheritance
@@ -46,7 +45,7 @@ export class ClassHierarchyProvider {
 
             // Check if class has subclasses
             const subclasses = await this.parser.findSubclasses(classInfo.name);
-            if (subclasses.size > 0 && classInfo.superclasses.length === 0) {
+            if (subclasses.size > 0) {
                 const subclassNames = Array.from(subclasses.values())
                     .flat()
                     .map(c => c.name)
@@ -58,18 +57,6 @@ export class ClassHierarchyProvider {
                     `Go to subclasses: ${subclassNames}`
                 );
                 implementedDecorations.push(decoration);
-            } else if (subclasses.size > 0 && classInfo.superclasses.length > 0) {
-                const subclassNames = Array.from(subclasses.values())
-                    .flat()
-                    .map(c => c.name)
-                    .join(', ');
-                const decoration = this.createDecoration(
-                    document,
-                    classInfo.startLine,
-                    'both',
-                    `Parent: ${classInfo.superclasses.join(', ')} | Subclasses: ${subclassNames}`
-                );
-                bothDecorations.push(decoration);
             }
 
             // Check methods
@@ -77,15 +64,7 @@ export class ClassHierarchyProvider {
                 const isOverriding = await this.parser.isMethodOverriding(classInfo, method.name);
                 const implementations = await this.parser.findMethodImplementations(classInfo.name, method.name);
 
-                if (isOverriding && implementations.length > 0) {
-                    const decoration = this.createDecoration(
-                        document,
-                        method.line,
-                        'both',
-                        `Overrides parent method | ${implementations.length} implementation(s)`
-                    );
-                    bothDecorations.push(decoration);
-                } else if (isOverriding) {
+                if (isOverriding) {
                     const decoration = this.createDecoration(
                         document,
                         method.line,
@@ -93,7 +72,9 @@ export class ClassHierarchyProvider {
                         'Overrides parent method'
                     );
                     overrideDecorations.push(decoration);
-                } else if (implementations.length > 0) {
+                }
+
+                if (implementations.length > 0) {
                     const decoration = this.createDecoration(
                         document,
                         method.line,
@@ -106,7 +87,7 @@ export class ClassHierarchyProvider {
         }
 
         // Apply decorations
-        this.applyDecorations(editor, overrideDecorations, implementedDecorations, bothDecorations);
+        this.applyDecorations(editor, overrideDecorations, implementedDecorations);
     }
 
     private createDecoration(
@@ -126,9 +107,6 @@ export class ClassHierarchyProvider {
         } else if (iconType === 'implemented') {
             iconSymbol = '↓';
             iconColor = '#2196F3';
-        } else if (iconType === 'both') {
-            iconSymbol = '↕';
-            iconColor = '#9C27B0';
         }
 
         return {
@@ -147,17 +125,14 @@ export class ClassHierarchyProvider {
     private applyDecorations(
         editor: vscode.TextEditor,
         overrideDecorations: vscode.DecorationOptions[],
-        implementedDecorations: vscode.DecorationOptions[],
-        bothDecorations: vscode.DecorationOptions[]
+        implementedDecorations: vscode.DecorationOptions[]
     ) {
         // Create separate decoration types for each icon type (without gutter icons)
         const overrideDecorationType = vscode.window.createTextEditorDecorationType({});
         const implementedDecorationType = vscode.window.createTextEditorDecorationType({});
-        const bothDecorationType = vscode.window.createTextEditorDecorationType({});
 
         editor.setDecorations(overrideDecorationType, overrideDecorations);
         editor.setDecorations(implementedDecorationType, implementedDecorations);
-        editor.setDecorations(bothDecorationType, bothDecorations);
     }
 
     /**
