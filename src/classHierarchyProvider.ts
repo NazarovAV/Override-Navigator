@@ -202,7 +202,13 @@ export class ClassHierarchyProvider {
         const editor = await vscode.window.showTextDocument(document);
         const position = new vscode.Position(line, 0);
         editor.selection = new vscode.Selection(position, position);
-        editor.revealRange(new vscode.Range(position, position));
+
+        // Position the line slightly above center for optimal readability
+        // This provides good context of both parent and child code
+        editor.revealRange(
+            new vscode.Range(position, position),
+            vscode.TextEditorRevealType.InCenter
+        );
     }
 
     private async showNavigationMenu(
