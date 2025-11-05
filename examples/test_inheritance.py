@@ -3,7 +3,14 @@
 """
 
 
-class Animal:
+class Common:
+    """Базовый класс для всех классов"""
+
+    def __init__(self, name):
+        self.name = name
+
+
+class Animal(Common):
     """Базовый класс животного"""
 
     def __init__(self, name):

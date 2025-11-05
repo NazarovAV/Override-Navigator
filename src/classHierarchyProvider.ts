@@ -15,7 +15,6 @@ export class ClassHierarchyProvider {
         return this.isNavigating;
     }
 
-
     /**
      * Update decorations for the current editor
      */
@@ -127,7 +126,7 @@ export class ClassHierarchyProvider {
         overrideDecorations: vscode.DecorationOptions[],
         implementedDecorations: vscode.DecorationOptions[]
     ) {
-        // Create separate decoration types for each icon type (without gutter icons)
+        // Create separate decoration types for each icon type
         const overrideDecorationType = vscode.window.createTextEditorDecorationType({});
         const implementedDecorationType = vscode.window.createTextEditorDecorationType({});
 
