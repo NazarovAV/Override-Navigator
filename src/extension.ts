@@ -1,11 +1,9 @@
 import * as vscode from 'vscode';
-import { PythonParser } from './pythonParser';
+import { PythonParser, ClassInfo } from './pythonParser';
 import { ClassHierarchyProvider } from './classHierarchyProvider';
 import { ClassNavigationCodeLensProvider } from './codeLensProvider';
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('Python Class Navigator is now active!');
-
     const parser = new PythonParser();
     const hierarchyProvider = new ClassHierarchyProvider(parser, context);
     const codeLensProvider = new ClassNavigationCodeLensProvider(parser);
@@ -16,8 +14,7 @@ export function activate(context: vscode.ExtensionContext) {
         codeLensProvider
     );
 
-    // Register commands - now accept either document or URI, and optional direct flag
-    // direct = false means show menu if multiple options
+    // Register navigation commands
     const navigateToImplementations = vscode.commands.registerCommand(
         'python-class-navigator.navigateToImplementations',
         async (documentOrUri: vscode.TextDocument | vscode.Uri, line: number, direct: boolean = false) => {
@@ -52,96 +49,12 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    // Add click handler for inline icons
+    // Handle clicks on inline navigation icons
     const clickListener = vscode.window.onDidChangeTextEditorSelection(async event => {
-        const editor = event.textEditor;
-        if (!editor || editor.document.languageId !== 'python') {
-            return;
-        }
-
-        // Ignore if we're currently navigating programmatically
-        if (hierarchyProvider.isCurrentlyNavigating()) {
-            return;
-        }
-
-        // Check if click was at the beginning of a line (where icons are)
-        const selection = event.selections[0];
-        if (!selection.isEmpty) {
-            return; // Not a click, it's a selection
-        }
-
-        const position = selection.active;
-
-        // If clicked at column 0-3 (where the icons are), trigger navigation
-        if (position.character <= 3) {
-            const line = position.line;
-            const classes = parser.parseDocument(editor.document);
-
-            // Check if this line has an icon
-            for (const classInfo of classes) {
-                if (classInfo.startLine === line) {
-                    const hasParent = classInfo.superclasses.length > 0;
-                    const subclasses = await parser.findSubclasses(classInfo.name);
-                    const hasChildren = subclasses.size > 0;
-
-                    // If has both parent and children, show menu to choose direction
-                    if (hasParent && hasChildren) {
-                        const choice = await vscode.window.showQuickPick([
-                            { label: '↑ Go to parent class', description: classInfo.superclasses.join(', '), value: 'parent' },
-                            { label: '↓ Go to child classes', description: `${subclasses.size} subclass(es)`, value: 'children' }
-                        ], {
-                            placeHolder: 'Choose navigation direction'
-                        });
-
-                        if (choice) {
-                            if (choice.value === 'parent') {
-                                await hierarchyProvider.navigateToSuperclass(editor.document, line, false);
-                            } else {
-                                await hierarchyProvider.navigateToImplementations(editor.document, line, false);
-                            }
-                        }
-                    } else if (hasParent) {
-                        await hierarchyProvider.navigateToSuperclass(editor.document, line, false);
-                    } else if (hasChildren) {
-                        await hierarchyProvider.navigateToImplementations(editor.document, line, false);
-                    }
-                    return;
-                }
-
-                for (const method of classInfo.methods) {
-                    if (method.line === line) {
-                        const isOverriding = await parser.isMethodOverriding(classInfo, method.name);
-                        const impls = await parser.findMethodImplementations(classInfo.name, method.name);
-
-                        // If has both parent and children, show menu to choose direction
-                        if (isOverriding && impls.length > 0) {
-                            const choice = await vscode.window.showQuickPick([
-                                { label: '↑ Go to parent method', description: `In ${classInfo.superclasses.join(', ')}`, value: 'parent' },
-                                { label: '↓ Go to child implementations', description: `${impls.length} implementation(s)`, value: 'children' }
-                            ], {
-                                placeHolder: 'Choose navigation direction'
-                            });
-
-                            if (choice) {
-                                if (choice.value === 'parent') {
-                                    await hierarchyProvider.navigateToSuperclass(editor.document, line, false);
-                                } else {
-                                    await hierarchyProvider.navigateToImplementations(editor.document, line, false);
-                                }
-                            }
-                        } else if (isOverriding) {
-                            await hierarchyProvider.navigateToSuperclass(editor.document, line, false);
-                        } else if (impls.length > 0) {
-                            await hierarchyProvider.navigateToImplementations(editor.document, line, false);
-                        }
-                        return;
-                    }
-                }
-            }
-        }
+        await handleIconClick(event, parser, hierarchyProvider);
     });
 
-    // Update decorations for the current editor
+    // Initialize decorations for the current editor
     if (vscode.window.activeTextEditor?.document.languageId === 'python') {
         hierarchyProvider.updateDecorations(vscode.window.activeTextEditor);
     }
@@ -154,6 +67,149 @@ export function activate(context: vscode.ExtensionContext) {
         clickListener,
         codeLensProviderDisposable
     );
+}
+
+/**
+ * Handle click events on navigation icons
+ */
+async function handleIconClick(
+    event: vscode.TextEditorSelectionChangeEvent,
+    parser: PythonParser,
+    hierarchyProvider: ClassHierarchyProvider
+) {
+    const editor = event.textEditor;
+
+    if (!editor || editor.document.languageId !== 'python') {
+        return;
+    }
+
+    const selection = event.selections[0];
+    if (!selection.isEmpty) {
+        return;
+    }
+
+    const position = selection.active;
+
+    // Check if click was in the icon area (column 0-3)
+    if (position.character > 3) {
+        return;
+    }
+
+    // Prevent rapid successive navigations (debounce)
+    if (!hierarchyProvider.canNavigate()) {
+        return;
+    }
+
+    const line = position.line;
+    const classes = parser.parseDocument(editor.document);
+
+    // Try to find a class at this line
+    for (const classInfo of classes) {
+        if (classInfo.startLine === line) {
+            await handleClassClick(classInfo, parser, hierarchyProvider, editor, line);
+            return;
+        }
+
+        // Try to find a method at this line
+        for (const method of classInfo.methods) {
+            if (method.line === line) {
+                await handleMethodClick(classInfo, method.name, parser, hierarchyProvider, editor, line);
+                return;
+            }
+        }
+    }
+}
+
+/**
+ * Handle click on a class declaration
+ */
+async function handleClassClick(
+    classInfo: ClassInfo,
+    parser: PythonParser,
+    hierarchyProvider: ClassHierarchyProvider,
+    editor: vscode.TextEditor,
+    line: number
+) {
+    const hasParent = classInfo.superclasses.length > 0;
+    const subclasses = await parser.findSubclasses(classInfo.name);
+    const hasChildren = subclasses.size > 0;
+
+    if (hasParent && hasChildren) {
+        const choice = await vscode.window.showQuickPick([
+            {
+                label: '↑ Go to parent class',
+                description: classInfo.superclasses.join(', '),
+                value: 'parent'
+            },
+            {
+                label: '↓ Go to child classes',
+                description: `${subclasses.size} subclass(es)`,
+                value: 'children'
+            }
+        ], {
+            placeHolder: 'Choose navigation direction'
+        });
+
+        if (!choice) {
+            return;
+        }
+
+        if (choice.value === 'parent') {
+            await hierarchyProvider.navigateToSuperclass(editor.document, line, false);
+        } else {
+            await hierarchyProvider.navigateToImplementations(editor.document, line, false);
+        }
+    } else if (hasParent) {
+        await hierarchyProvider.navigateToSuperclass(editor.document, line, false);
+    } else if (hasChildren) {
+        await hierarchyProvider.navigateToImplementations(editor.document, line, false);
+    }
+}
+
+/**
+ * Handle click on a method declaration
+ */
+async function handleMethodClick(
+    classInfo: ClassInfo,
+    methodName: string,
+    parser: PythonParser,
+    hierarchyProvider: ClassHierarchyProvider,
+    editor: vscode.TextEditor,
+    line: number
+) {
+    const isOverriding = await parser.isMethodOverriding(classInfo, methodName);
+    const implementations = await parser.findMethodImplementations(classInfo.name, methodName);
+
+    if (isOverriding && implementations.length > 0) {
+        const choice = await vscode.window.showQuickPick([
+            {
+                label: '↑ Go to parent method',
+                description: `In ${classInfo.superclasses.join(', ')}`,
+                value: 'parent'
+            },
+            {
+                label: '↓ Go to child implementations',
+                description: `${implementations.length} implementation(s)`,
+                value: 'children'
+            }
+        ], {
+            placeHolder: 'Choose navigation direction'
+        });
+
+        if (!choice) {
+            return;
+        }
+
+        if (choice.value === 'parent') {
+            await hierarchyProvider.navigateToSuperclass(editor.document, line, false);
+        } else {
+            await hierarchyProvider.navigateToImplementations(editor.document, line, false);
+        }
+    } else if (isOverriding) {
+        await hierarchyProvider.navigateToSuperclass(editor.document, line, false);
+    } else if (implementations.length > 0) {
+        await hierarchyProvider.navigateToImplementations(editor.document, line, false);
+    }
 }
 
 export function deactivate() {}

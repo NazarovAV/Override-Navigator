@@ -1,52 +1,51 @@
 {
     "name": "python-class-navigator",
     "displayName": "Python Class Navigator",
-    "description": "Navigate between parent and child classes with gutter icons",
+    "description": "PyCharm-like navigation between parent and child classes and methods for Python",
     "version": "0.0.1",
+    "publisher": "your-publisher-name",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/your-username/python-class-navigator"
+    },
     "engines": {
         "vscode": "^1.80.0"
     },
     "categories": [
-        "Programming Languages"
+        "Programming Languages",
+        "Other"
+    ],
+    "keywords": [
+        "python",
+        "navigation",
+        "class",
+        "inheritance",
+        "method",
+        "override"
     ],
     "activationEvents": [
         "onLanguage:python"
     ],
     "main": "./out/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "python-class-navigator.navigateToImplementations",
-        "title": "Python: Navigate to Implementations"
-      },
-      {
-        "command": "python-class-navigator.navigateToSuperclass",
-        "title": "Python: Navigate to Superclass"
-      },
-      {
-        "command": "python-class-navigator.handleIconClick",
-        "title": "Python: Navigate via Icon"
-      },
-      {
-        "command": "python-class-navigator.iconClick",
-        "title": "Python: Click Icon to Navigate"
-      }
-    ],
-    "keybindings": [
-      {
-        "command": "python-class-navigator.iconClick",
-        "key": "alt+enter",
-        "mac": "alt+enter",
-        "when": "editorTextFocus && editorLangId == python"
-      }
-    ]
-  },
+    "contributes": {
+        "commands": [
+            {
+                "command": "python-class-navigator.navigateToImplementations",
+                "title": "Navigate to Child Classes/Method Implementations"
+            },
+            {
+                "command": "python-class-navigator.navigateToSuperclass",
+                "title": "Navigate to Parent Class/Method"
+            }
+        ]
+    },
     "scripts": {
         "vscode:prepublish": "npm run compile",
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
         "pretest": "npm run compile && npm run lint",
-        "lint": "eslint src --ext ts"
+        "lint": "eslint src --ext ts",
+        "package": "vsce package"
     },
     "devDependencies": {
         "@types/vscode": "^1.80.0",

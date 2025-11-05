@@ -1,111 +1,119 @@
 # Python Class Navigator
 
-Расширение для VS Code, которое добавляет навигацию между родительскими и дочерними классами в Python, аналогично функциональности PyCharm.
+A VS Code extension that provides PyCharm-like navigation between parent and child classes and methods in Python.
 
-## Возможности
+## Features
 
-- 🎯 **Кликабельные inline иконки**: Цветные стрелки (↑↓↕) перед кодом:
-  - 🟢 **Зеленая ↑** - класс/метод наследуется от родительского (клик → к родителю)
-  - 🔵 **Синяя ↓** - класс/метод имеет дочерние реализации (клик → к потомкам)
-  - 🟣 **Фиолетовая ↕** - и то, и другое (клик → умная навигация)
-  - **Клик на стрелку**: один вариант → переход сразу, несколько → меню выбора
+### 🎯 Visual Navigation Indicators
 
-- 💡 **Кликабельные CodeLens**: Текстовые ссылки над кодом:
-  - "↑ Parent" - переход к родительскому классу
-  - "↓ N subclasses" - меню выбора дочерних классов
-  - "↑ overrides" - переход к родительскому методу
-  - "↓ N impls" - меню выбора реализаций метода
+Inline icons appear next to class and method declarations:
 
-- ⚡ **Hover подсказки**: При наведении на любую иконку
+- **↑** (Green) - Navigate to parent class/method
+- **↓** (Blue) - Navigate to child classes/implementations
+- **↑ ↓** (Both) - Class/method with both parent and children
 
-- ⌨️ **Горячая клавиша**: Alt+Enter на строке с иконкой
+### 🔍 Navigation Capabilities
 
-## Использование
+#### Class Navigation
+- Jump to parent/base classes
+- Jump to child/derived classes
+- Works across multiple files in your workspace
 
-1. Откройте любой Python файл с классами
-2. Расширение автоматически проанализирует иерархию классов
-3. Вы увидите:
-   - **Иконки в gutter** (слева от номеров строк) - визуальные индикаторы
-   - **CodeLens** (текстовые ссылки над кодом) - для кликабельной навигации
-4. Кликните на CodeLens или иконку для навигации
-5. Наведите курсор на иконку для просмотра подробной информации
+#### Method Navigation
+- Jump to overridden parent methods
+- Jump to child method implementations
+- Automatically detects method overrides
 
-### Пример
+### 📝 CodeLens Integration
+
+Clickable links appear above class and method declarations for quick navigation.
+
+### 🖱️ Click Navigation
+
+Click on the navigation arrows (↑ ↓) to navigate:
+- **Single target**: Navigate immediately
+- **Multiple targets**: Choose from a quick pick menu
+- **Both directions**: Choose whether to go up or down the hierarchy
+
+## Usage
+
+### Quick Start
+
+1. Open any Python file
+2. Look for the colored arrows (↑ ↓) next to class and method declarations
+3. Click on an arrow to navigate
+4. Use CodeLens links for alternative navigation
+
+### Navigation Patterns
+
+**Parent Navigation (↑)**
+- Click the green up arrow to go to parent class/method
+- Direct navigation if single parent
+- Menu selection if multiple inheritance
+
+**Child Navigation (↓)**
+- Click the blue down arrow to go to child classes/implementations
+- Direct navigation if single child
+- Menu selection if multiple children
+
+**Bidirectional (↑ ↓)**
+- Click anywhere on the arrows
+- Choose direction from quick pick menu
+
+## Example
 
 ```python
-                        ↓ 2 subclasses        # CodeLens: кликабельная ссылка
-  6 | 🔵 class Animal:                        # Иконка в gutter (слева)
-  7 |        def __init__(self, name):
-  8 |            self.name = name
-  9 |
-                        ↓ 2 impls              # CodeLens
- 10 | 🔵     def speak(self):                 # Иконка в gutter
- 11 |            pass
- 12 |
-                        ↑ Animal               # CodeLens к родителю
- 22 | 🟢 class Dog(Animal):                   # Иконка в gutter
- 23 |
-                        ↑ overrides            # CodeLens к родительскому методу
- 24 | 🟢     def speak(self):                 # Иконка в gutter
- 25 |            print("Woof!")
- 26 |
-                        ↑ Animal               # CodeLens
- 32 | 🟢 class Cat(Animal):                   # Иконка в gutter
- 33 |
-                        ↑ overrides            # CodeLens
- 34 | 🟢     def speak(self):                 # Иконка в gutter
- 35 |            print("Meow!")
+class Animal:
+    def speak(self):  # ↓ (has implementations)
+        pass
+
+class Dog(Animal):  # ↑ (has parent) ↓ (has children)
+    def speak(self):  # ↑ (overrides) ↓ (has implementations)
+        return "Woof!"
+
+class Labrador(Dog):  # ↑ (has parent)
+    def speak(self):  # ↑ (overrides)
+        return "Friendly woof!"
 ```
 
-**Кликните на CodeLens или иконку** для навигации!
+## Installation
 
-## Команды
+### From Source
 
-- `Python Class Navigator: Navigate to Implementations` - Переход к реализациям
-- `Python Class Navigator: Navigate to Superclass` - Переход к родительскому классу
+1. Clone the repository
+2. Run `npm install`
+3. Press `F5` to open Extension Development Host
+4. Open a Python file to see navigation icons
 
-## Требования
-
-- VS Code версии 1.80.0 или выше
-- Python файлы в рабочей области
-
-## Установка для разработки
-
-1. Клонируйте репозиторий
-2. Запустите `npm install`
-3. Откройте проект в VS Code
-4. Нажмите F5 для запуска в режиме отладки
-
-## Сборка расширения
+### Building VSIX
 
 ```bash
 npm install
 npm run compile
+npm run package
 ```
 
-Для создания .vsix пакета:
-```bash
-npm install -g @vscode/vsce
-vsce package
-```
+Install the generated `.vsix` file in VS Code.
 
-## Известные ограничения
+## Requirements
 
-- Анализ работает только для Python файлов в текущей рабочей области
-- Не поддерживаются динамические классы и метаклассы
-- Импорты из внешних библиотек не анализируются
+- VS Code 1.80.0 or higher
+- Python files in your workspace
 
-## Планы развития
+## Known Limitations
 
-- [ ] Поддержка множественного наследования
-- [ ] Кэширование результатов анализа для повышения производительности
-- [ ] Поддержка интерфейсов (Protocol, ABC)
-- [ ] Интеграция с Python Language Server для более точного анализа
+- Only works with Python files in the workspace
+- Does not analyze external packages or libraries
+- Clicking the same position rapidly may not trigger navigation (50ms cooldown)
 
-## Лицензия
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+
+## License
 
 MIT
 
-## Автор
+## Changelog
 
-Создано для удобной навигации по Python коду в VS Code
+See [CHANGELOG.md](CHANGELOG.md) for version history.
